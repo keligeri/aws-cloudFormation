@@ -1,0 +1,15 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Create a new VPC."
+Parameters:
+  CidrNotation:
+    Type: String
+    Default: 10.0.0.0/24
+    Description: "The CIDR notation for the new VPC"
+Resources:
+  GehcGergoEc2:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref CidrNotation
+      EnableDnsSupport: 'false'
+      EnableDnsHostnames: 'false'
+      InstanceTenancy: dedicated
