@@ -1,0 +1,77 @@
+AWSTemplateFormatVersion: "2010-09-09" # OPTIONAL - THE ONLY VALID VERSION
+Description: >
+  Create an EC2 instance running the Amazon Linux 32 bit AMI.
+Parameters:
+  CustomImageId:
+    Type: String
+    Default: "ami-0ff8a91507f77f867"
+    Description: "The used AMI ID"
+    AllowedPattern: "[a-zA-Z0-9]"
+    ConstraintDescription: "Must be a valid AMI ID"
+  MyParamLogicalId:
+    Type: String
+    Default: "helloDefaultValue"
+    AllowedPattern: "[a-z]"
+    Description: "This parameter was parse from the input"
+  PSQLPort:
+    Type: List<Number>
+    Default: 5432
+    AllowedPattern: "[0-9]"
+    Description: "It can parse numbers list such as: [\"80\", \"20\"]"
+  EnvironmentType:
+    Type: String
+    Default: "dev"
+    AllowedValues:
+      - "dev"
+      - "prod"
+      - "qa"
+      - "stage"
+    Description: "Different environment type"
+    ConstraintDescription: "Must be a dev, prod, qa or stage"
+
+Mappings:
+  AmiIdByEnvironmentsAndRegion:
+    us-west-1:
+      dev: "DEV-AMI - example"
+      prod: "PROD-AMI - example"
+  ClientCredentialsByEnvironmentType:
+    prod:
+      username: "prod-env"
+      password: "never host your pass"
+    test:
+      username: "test-env"
+      password: "never host your pass"
+
+Conditions:
+  IsProdEnv: !Equals [ !Ref EnvironmentType, "prod" ]
+
+Resources:
+  GehcGergoEc2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref CustomImageId
+      InstanceType: t2.micro
+      UserData:
+        - "Fn::Base64": !Sub Queue=${GehcGergoQueue}
+        - "Fn::Base64":
+          !Sub |
+            #!/bin/bash
+              echo helloWorld
+      KeyName: !Sub "asd"
+
+  GehcGergoQueue:
+    Type: AWS::SQS::Queue
+    Properties: {}
+
+
+
+Outputs:
+  TestCurrentAmi:
+    Description: "Return the name of the AMI ID that matches the region and environment type keys"
+    Value: !FindInMap [AmiIdByEnvironmentsAndRegion, !Ref "AWS::Region", !Ref EnvironmentType]
+  ClientCredentialsIfIsProd:
+    Description: "If is prod environment, it will instantiate the value from the map"
+    Condition: IsProdEnv
+    Value: !FindInMap [ClientCredentialsByEnvironmentType, !Ref EnvironmentType, prod]
+    Export:
+      Name: "Value to export"
