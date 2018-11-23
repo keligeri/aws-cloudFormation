@@ -1,0 +1,48 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Create a new VPC with a public subnet and a new EC"
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: "The environment name to identify the resources"
+  VpcCidrNotation:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: "The CIDR notation for the new VPC"
+  PublicSubnetCidr:
+    Description: "The IP range (CIDR notation) for the VPC"
+    Type: String
+    Default: 10.0.0.0/24
+Mappings:
+  ImageIdByRegion:
+    us-west-1:
+      ImageId: "ami-011b6930a81cd6aaf"
+    us-east-1:
+      ImageId: "ami-009d6802948d06e52"
+Resources:
+  GehcGergoVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidrNotation
+      EnableDnsSupport: 'false'
+      EnableDnsHostnames: 'false'
+      InstanceTenancy: dedicated
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvironmentName}-vpc
+  GehcGergoPublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref GehcGergoVpc
+      AvailabilityZone: !Select [0, !GetAZs "AWS::Region"]
+      CidrBlock: !Ref PublicSubnetCidr
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvironmentName}-public-subnet
+  GehcGergoEc2:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !FindInMap [ImageIdByRegion, !Ref "AWS::Region", ImageId]
+      InstanceType: t2.micro
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvironmentName}-ec2
