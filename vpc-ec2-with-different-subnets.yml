@@ -1,0 +1,167 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description:
+  This template deploys a VPC, with one public and private subnet.
+  It deploys an Internet Gateway with a default route on the oublic subnets.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: The environment name to identify the resources
+
+  VpcCidrNotation:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: The CIDR notation for the this VPC
+
+  DefaultAvailabilityZone:  # TODO move to mappings
+    Type: String
+    Default: "us-west-1a"
+
+  PublicSubnetCidr:
+    Description: The IP range (CIDR notation) for the public subnet
+    Type: String
+    Default: 10.0.0.0/24
+
+  PrivateSubnetCidr:
+    Description: The IP range (CIDR notation) for the private subnet
+    Type: String
+    Default: 10.0.1.0/24
+
+Mappings:
+  ImageIdByRegion:
+    us-west-1:
+      ImageId: ami-011b6930a81cd6aaf
+    us-east-1:
+      ImageId: ami-009d6802948d06e52
+
+Resources:
+  GehcGergoVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidrNotation
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: dedicated
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvironmentName}-vpc
+
+  GehcGergoInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvironmentName}-IGW
+
+  GehcGergoInternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref GehcGergoInternetGateway
+      VpcId: !Ref GehcGergoVpc
+
+  GehcGergoPublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref GehcGergoVpc
+      AvailabilityZone: !Ref DefaultAvailabilityZone
+      CidrBlock: !Ref PublicSubnetCidr
+      MapPublicIpOnLaunch: true
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvironmentName}-public-subnet
+
+  GehcGergoPrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref GehcGergoVpc
+      AvailabilityZone: !Ref DefaultAvailabilityZone
+      CidrBlock: !Ref PrivateSubnetCidr
+      MapPublicIpOnLaunch: false
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvironmentName}-private-subnet
+
+  GehcGergoEc2JumpServer:
+    Type: AWS::EC2::Instance
+    Properties:
+      SubnetId: !Ref GehcGergoPublicSubnet
+      ImageId: !FindInMap [ImageIdByRegion, !Ref "AWS::Region", ImageId]
+      InstanceType: t2.micro
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvironmentName}-jumpserver-ec2
+
+  GehcGergoEc2PrivateServer:
+    Type: AWS::EC2::Instance
+    Properties:
+      SubnetId: !Ref GehcGergoPrivateSubnet
+      ImageId: !FindInMap [ImageIdByRegion, !Ref "AWS::Region", ImageId]
+      InstanceType: t2.micro
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvironmentName}-private-ec2
+
+  GehcGergoNatGatewayEIP:
+    Type: AWS::EC2::EIP
+    DependsOn: GehcGergoInternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  GehcGergoNatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt GehcGergoNatGatewayEIP.AllocationId
+      SubnetId: !Ref GehcGergoPublicSubnet
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvironmentName}-NGW
+
+  GehcGergoPublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref GehcGergoVpc
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvironmentName}-public-rt
+
+  GehcGergoDefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GehcGergoInternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref GehcGergoPublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref GehcGergoInternetGateway
+
+  GehcGergoPublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref GehcGergoPublicRouteTable
+      SubnetId: !Ref GehcGergoPublicSubnet
+
+  GehcGergoPrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref GehcGergoVpc
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvironmentName}-private-rt
+
+  GehcGergoDefaultPrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref GehcGergoPrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref GehcGergoNatGateway
+
+  GehcGergoPrivateSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref GehcGergoPrivateRouteTable
+      SubnetId: !Ref GehcGergoPrivateSubnet
+
+  NoIngressSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "no-ingress-sg"
+      GroupDescription: "Security group with no ingress rule"
+      VpcId: !Ref GehcGergoVpc
